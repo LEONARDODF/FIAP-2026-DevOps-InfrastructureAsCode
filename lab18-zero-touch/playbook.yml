@@ -1,0 +1,41 @@
+---
+- name: "Configuração Automatizada Zero-Touch com Nginx"
+  hosts: webservers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: "1. Aguardar inicialização completa do sistema (cloud-init/apt lock)"
+      raw: while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 2; done
+      changed_when: false
+
+    - name: "2. Atualizar cache de pacotes (apt)"
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: "3. Instalar o servidor Nginx"
+      apt:
+        name: nginx
+        state: present
+
+    - name: "4. Iniciar e habilitar o serviço Nginx"
+      service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: "5. Publicar página web dinâmica a partir do Template Jinja2"
+      template:
+        src: templates/index.html.j2
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      notify: "Reiniciar Nginx"
+
+  handlers:
+    - name: "Reiniciar Nginx"
+      service:
+        name: nginx
+        state: restarted
