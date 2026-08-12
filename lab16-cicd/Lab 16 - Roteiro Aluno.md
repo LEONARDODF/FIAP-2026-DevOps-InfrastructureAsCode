@@ -57,7 +57,7 @@ Para que o runner do GitHub Actions possa autenticar chamadas de API na sua cont
 | `AWS_ACCESS_KEY_ID` | Cole o valor de `aws_access_key_id` da AWS Academy |
 | `AWS_SECRET_ACCESS_KEY` | Cole o valor de `aws_secret_access_key` da AWS Academy |
 | `AWS_SESSION_TOKEN` | Cole o valor de `aws_session_token` da AWS Academy |
-| `AWS_REGION` | `us-east-1` |
+| `c` | `us-east-1` |
 
 > [!WARNING]
 > **Atenção às Credenciais da AWS Academy:** As credenciais de laboratório expiram periodicamente (a cada 3–4 horas). Caso o pipeline falhe com erro `ExpiredToken` ou `AuthFailure`, basta atualizar os valores desses Secrets no seu fork.
