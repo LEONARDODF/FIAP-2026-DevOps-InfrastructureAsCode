@@ -1,0 +1,37 @@
+---
+- name: "Configuração Multi-Host de Servidores Web"
+  hosts: webservers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: "1. Atualizar o cache de pacotes (apt)"
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: "2. Instalar o servidor web Nginx"
+      apt:
+        name: nginx
+        state: present
+
+    - name: "3. Garantir que o Nginx está ativo e habilitado na inicialização"
+      service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: "4. Renderizar página web dinâmica utilizando Template Jinja2"
+      template:
+        src: templates/index.html.j2
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      notify: "Reiniciar Nginx"
+
+  handlers:
+    - name: "Reiniciar Nginx"
+      service:
+        name: nginx
+        state: restarted
