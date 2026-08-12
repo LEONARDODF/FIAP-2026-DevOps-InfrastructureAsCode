@@ -101,6 +101,15 @@ on:
     paths:
       - 'lab16-cicd/**'
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Ação a executar na infraestrutura"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
 
 permissions:
   contents: read
@@ -147,10 +156,10 @@ jobs:
           exit-code: "0"
 
   # ---------------------------------------------------------
-  # Job 2: Plan & Deploy na AWS (CD)
+  # Job 2: Plan, Apply ou Destroy na AWS (CD)
   # ---------------------------------------------------------
   deploy_aws:
-    name: "2. Deploy na AWS"
+    name: "2. Deploy / Destroy na AWS"
     needs: quality_and_security
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -167,6 +176,18 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
 
+      - name: "Sincronizar Estado Remoto (S3)"
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET_NAME="tfstate-lab16-${ACCOUNT_ID}"
+          echo "BUCKET_NAME=${BUCKET_NAME}" >> $GITHUB_ENV
+          
+          # Cria o bucket S3 de persistencia de estado se nao existir
+          aws s3 mb s3://${BUCKET_NAME} --region ${{ secrets.AWS_REGION || 'us-east-1' }} || true
+          
+          # Baixa o estado do Terraform se existir
+          aws s3 cp s3://${BUCKET_NAME}/terraform.tfstate terraform.tfstate || echo "Primeira execucao: sem estado previo."
+
       - name: "Instalar Terraform"
         uses: hashicorp/setup-terraform@v3
         with:
@@ -175,11 +196,22 @@ jobs:
       - name: "Terraform Init"
         run: terraform init
 
-      - name: "Terraform Plan"
-        run: terraform plan -out=tfplan
+      - name: "Executar Terraform Apply"
+        if: ${{ github.event.inputs.action != 'destroy' }}
+        run: |
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
 
-      - name: "Terraform Apply"
-        run: terraform apply -auto-approve tfplan
+      - name: "Executar Terraform Destroy"
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: terraform destroy -auto-approve
+
+      - name: "Persistir Estado no S3"
+        if: always()
+        run: |
+          if [ -f terraform.tfstate ]; then
+            aws s3 cp terraform.tfstate s3://${BUCKET_NAME}/terraform.tfstate
+          fi
 ```
 
 ---
@@ -194,16 +226,16 @@ jobs:
    git push origin main
    ```
 3. No GitHub, navegue até a aba **Actions** do seu fork.
-4. Clique na execução do workflow `Terraform CI/CD Pipeline` e acompanhe em tempo real:
+4. Clique na execução do workflow `Terraform CI/CD Pipeline (Lab 16)` e acompanhe em tempo real:
    - **Quality Gate & Lint:** Valida a formatação e roda o scanner de segurança.
-   - **Deploy na AWS:** Conecta na sua AWS Academy, executa o `terraform plan` e finaliza o `terraform apply`.
+   - **Deploy / Destroy na AWS:** Sincroniza o estado no S3, conecta na sua AWS Academy, executa o `terraform plan` e finaliza o `terraform apply`.
 
 ---
 
 ## 🔍 Pontos de Validação Prática
 
 1. **Inspecionar os Logs da Execução:**
-   - Abra os detalhes do Job `2. Deploy na AWS` no GitHub Actions e expanda a etapa `Terraform Apply`.
+   - Abra os detalhes do Job `2. Deploy / Destroy na AWS` no GitHub Actions e expanda a etapa `Executar Terraform Apply`.
    - Localize o valor do output `web_url` (ex: `http://54.x.x.x`).
 2. **Testar a Aplicação Web no Navegador:**
    - Acesse o endereço IP público no navegador para ver a página servida pelo Nginx.
@@ -212,12 +244,22 @@ jobs:
 
 ---
 
-## 🧹 Limpeza do Ambiente
+## 🧹 Limpeza do Ambiente (Desprovisionamento)
 
-Para não consumir créditos desnecessários da sua conta da AWS Academy:
+Para garantir que os recursos não continuem consumindo créditos da AWS Academy após a aula, você pode destruir a infraestrutura de duas formas:
 
-1. No terminal do seu Codespaces na pasta `lab16-cicd/`, execute:
-   ```bash
-   terraform destroy
-   ```
-   *Digite **`yes`** para confirmar a destruição da instância e do Security Group.*
+### Método 1: Destruição Automatizada pelo GitHub Actions (Recomendado)
+1. No seu fork no GitHub, acesse a aba **Actions**.
+2. No menu lateral esquerdo, clique no workflow **Terraform CI/CD Pipeline (Lab 16)**.
+3. Clique no botão **Run workflow** (no lado direito).
+4. No campo **Ação a executar na infraestrutura**, selecione **`destroy`**.
+5. Clique em **Run workflow**. O pipeline baixará o estado do S3 e executará o `terraform destroy -auto-approve` na AWS.
+
+### Método 2: Destruição via Terminal (Codespaces)
+Caso prefira rodar pelo terminal, sincronize o arquivo de estado e destrua:
+```bash
+cd lab16-cicd
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws s3 cp s3://tfstate-lab16-${ACCOUNT_ID}/terraform.tfstate terraform.tfstate
+terraform destroy
+```
