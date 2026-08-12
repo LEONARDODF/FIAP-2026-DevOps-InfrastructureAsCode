@@ -1,0 +1,94 @@
+name: "Terraform CI/CD Pipeline (Lab 16)"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lab16-cicd/**'
+      - '.github/workflows/terraform-pipeline.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lab16-cicd/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Define o diretório de execução padrão para o Lab 16
+defaults:
+  run:
+    working-directory: ./lab16-cicd
+
+jobs:
+  # ---------------------------------------------------------
+  # Job 1: Quality Gate & DevSecOps (CI)
+  # ---------------------------------------------------------
+  quality_and_security:
+    name: "1. Quality Gate & Lint"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Clonar o Repositório"
+        uses: actions/checkout@v4
+
+      - name: "Instalar Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+
+      - name: "Verificar Formatação (fmt)"
+        run: terraform fmt -check
+
+      - name: "Inicializar sem Backend (Validação)"
+        run: terraform init -backend=false
+
+      - name: "Validar Sintaxe HCL"
+        run: terraform validate
+
+      - name: "Scanner de Segurança (Trivy / IaC)"
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "config"
+          scan-dir: "lab16-cicd"
+          hide-progress: true
+          format: "table"
+          exit-code: "0"
+
+  # ---------------------------------------------------------
+  # Job 2: Plan & Deploy na AWS (CD)
+  # ---------------------------------------------------------
+  deploy_aws:
+    name: "2. Deploy na AWS"
+    needs: quality_and_security
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Clonar o Repositório"
+        uses: actions/checkout@v4
+
+      - name: "Configurar Credenciais da AWS"
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: "Instalar Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+
+      - name: "Terraform Init"
+        run: terraform init
+
+      - name: "Terraform Plan"
+        run: terraform plan -out=tfplan
+
+      - name: "Terraform Apply"
+        run: terraform apply -auto-approve tfplan
