@@ -41,7 +41,7 @@ Abra o arquivo `main.tf` na pasta `lab15-eks/` e observe os blocos principais:
      version  = var.eks_version
 
      vpc_config {
-       subnet_ids = aws_subnet.private_subnets[*].id
+       subnet_ids = concat(aws_subnet.public_subnets[*].id, aws_subnet.private_subnets[*].id)
      }
    }
 
@@ -49,7 +49,7 @@ Abra o arquivo `main.tf` na pasta `lab15-eks/` e observe os blocos principais:
      cluster_name    = aws_eks_cluster.eks_cluster.name
      node_group_name = "eks-node-group"
      node_role_arn   = data.aws_iam_role.lab_role.arn
-     subnet_ids      = aws_subnet.private_subnets[*].id
+     subnet_ids      = aws_subnet.public_subnets[*].id # Subnets publicas para registro rapido dos nos
 
      scaling_config {
        desired_size = var.desired_size # Padrão: 2

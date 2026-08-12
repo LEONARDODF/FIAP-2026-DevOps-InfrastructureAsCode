@@ -134,12 +134,12 @@ data "aws_iam_role" "lab_role" {
 
 # EKS Cluster
 resource "aws_eks_cluster" "eks_cluster" {
-  name = var.cluster_name
+  name     = var.cluster_name
   role_arn = data.aws_iam_role.lab_role.arn
-  version = var.eks_version
+  version  = var.eks_version
 
   vpc_config {
-    subnet_ids = aws_subnet.private_subnets[*].id
+    subnet_ids = concat(aws_subnet.public_subnets[*].id, aws_subnet.private_subnets[*].id)
   }
 
   tags = {
@@ -149,16 +149,16 @@ resource "aws_eks_cluster" "eks_cluster" {
 
 # Node Group
 resource "aws_eks_node_group" "eks_node_group" {
-  cluster_name = aws_eks_cluster.eks_cluster.name
+  cluster_name    = aws_eks_cluster.eks_cluster.name
   node_group_name = "eks-node-group"
-  node_role_arn = data.aws_iam_role.lab_role.arn
-  subnet_ids = aws_subnet.private_subnets[*].id
-  version = var.eks_version
+  node_role_arn   = data.aws_iam_role.lab_role.arn
+  subnet_ids      = aws_subnet.public_subnets[*].id
+  version         = var.eks_version
 
   scaling_config {
     desired_size = var.desired_size
-    max_size = var.max_size
-    min_size = var.min_size
+    max_size     = var.max_size
+    min_size     = var.min_size
   }
 
   update_config {
